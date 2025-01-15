@@ -45,6 +45,7 @@ class BotController extends Controller
             $callmid = $data['callback_query']['message']['message_id'] ?? null;
 
             if ($text === '/start') {
+                // Log::info(Carbon::now());
                 $this->store($chat_id, "Welcome, please enter:", [
                     'keyboard' => [
                         [
@@ -71,39 +72,39 @@ class BotController extends Controller
                 return;
             }
 
-            if ($text === 'Company holder') {
-                Cache::put("register_step_{$chat_id}", 'company_holder');
+            if ($text == 'Employee of company') {
+                Cache::put("register_step_{$chat_id}", 'user');
                 $this->store($chat_id, "Please, enter your company name:", [
                     'remove_keyboard' => true
                 ]);
             }
 
-            if ($text === 'Employee of company') {
-                Cache::put("register_step_{$chat_id}", 'company_user');
-                $this->store($chat_id, "Please, enter your company name:", [
-                    'remove_keyboard' => true
-                ]);
-            }
-
-            if (Cache::get("register_step_{$chat_id}") === 'company_holder') {
+            if (Cache::get("register_step_{$chat_id}") === 'user' && $text != 'Employee of company') {
                 if (strlen($text) < 2) {
                     $this->store($chat_id, "Name should be at least 2 characters!");
                     return;
                 }
 
-                Cache::put("register_company_holder_{$chat_id}", $text);
+                Cache::put("register_user_{$chat_id}", $text);
                 Cache::put("register_step_{$chat_id}", 'name');
                 $this->store($chat_id, "Please, enter your name:");
                 return;
             }
 
-            if (Cache::get("register_step_{$chat_id}") === 'company_user') {
+            if ($text == 'Company holder') {
+                $this->store($chat_id, "Please, enter your company name:", [
+                    'remove_keyboard' => true
+                ]);
+                Cache::put("register_step_{$chat_id}", 'holder');
+            }
+
+            if (Cache::get("register_step_{$chat_id}") == 'holder' && $text != 'Company holder') {
                 if (strlen($text) < 2) {
                     $this->store($chat_id, "Name should be at least 2 characters!");
                     return;
                 }
 
-                Cache::put("register_company_user_{$chat_id}", $text);
+                Cache::put("register_holder_{$chat_id}", $text);
                 Cache::put("register_step_{$chat_id}", 'name');
                 $this->store($chat_id, "Please, enter your name:");
                 return;
@@ -153,7 +154,6 @@ class BotController extends Controller
 
                 try {
                     Mail::to($email)->send(new SendCode($name, $confirmation_code));
-                    Log::info('Email sent successfully');
                     $this->store($chat_id, "We sent you an email. Please, check your inbox.");
                 } catch (\Exception $e) {
                     Log::error('Email sending failed: ' . $e->getMessage());
@@ -198,9 +198,11 @@ class BotController extends Controller
                             $this->store($chat_id, "Image download failed! Please, try again.");
                             return;
                         }
-                        if (isset($register_company_user)) {
-                            $holder = User::where('company', Cache::get("register_company_user_{$chat_id}"))->where('role', 'holder')->first();
-                            if (User::where('company', Cache::get("register_company_user_{$chat_id}"))->exists() && $holder) {
+                        $userComp = Cache::get("register_user_{$chat_id}");
+                        $holderComp = Cache::get("register_holder_{$chat_id}");
+                        if (isset($userComp)) {
+                            $holder = User::where('company', $userComp)->where('role', 'holder')->first();
+                            if ($holder) {
                                 $user = User::create([
                                     'name' => Cache::get("register_name_{$chat_id}"),
                                     'email' => Cache::get("register_email_{$chat_id}"),
@@ -208,12 +210,13 @@ class BotController extends Controller
                                     'chat_id' => $chat_id,
                                     'image' => "uploads/{$image_name}",
                                     'email_verified_at' => Carbon::now(),
-                                    'company' => Cache::get("register_company_user_{$chat_id}"),
+                                    'company' => $userComp,
                                 ]);
-                                $userData = "User name: " . Cache::get("register_name_{$chat_id}") . "\n" .
-                                    "Email: " . Cache::get("register_email_{$chat_id}") . "\n" .
-                                    "Chat ID: " . $chat_id . "\n" .
-                                    "Company: " . Cache::get("register_company_user_{$chat_id}") . "\n" .
+
+                                $userData = "User name: " . $user->name . "\n" .
+                                    "Email: " . $user->email . "\n" .
+                                    "Chat ID: " . $user->chat_id . "\n" .
+                                    "Company: " . $user->company . "\n" .
                                     "Is it your employee?";
 
                                 $replyMarkup = [
@@ -225,8 +228,9 @@ class BotController extends Controller
                                     ]
                                 ];
                                 $this->store($holder->chat_id, $userData, $replyMarkup);
+                                $this->store($chat_id, "Registration successful!");
                             }
-                        } elseif (isset($register_company_holder)) {
+                        } elseif (isset($holderComp)) {
                             $user = User::create([
                                 'name' => Cache::get("register_name_{$chat_id}"),
                                 'email' => Cache::get("register_email_{$chat_id}"),
@@ -234,36 +238,38 @@ class BotController extends Controller
                                 'chat_id' => $chat_id,
                                 'image' => "uploads/{$image_name}",
                                 'email_verified_at' => Carbon::now(),
-                                'company_holder' => Cache::get("register_company_holder_{$chat_id}"),
                                 'role' => 'holder',
+                                'company' => $holderComp,
                             ]);
                             $admin = User::where('role', 'admin')->first();
                             if ($admin) {
-                                $userData = "User name: " . Cache::get("register_name_{$chat_id}") . "\n" .
-                                    "Email: " . Cache::get("register_email_{$chat_id}") . "\n" .
-                                    "Chat ID: " . $chat_id;
+                                $userData = "User name: " . $user->name . "\n" .
+                                    "Email: " . $user->email . "\n" .
+                                    "Chat ID: " . $user->chat_id . "\n" .
+                                    "Company: " . $user->company . "\n" .
 
-                                $replyMarkup = [
-                                    'inline_keyboard' => [
-                                        [
-                                            ['text' => 'Confirm✅', 'callback_data' => "confirm_{$chat_id}"],
-                                            ['text' => 'Cancel⛔️', 'callback_data' => "cancel_{$chat_id}"],
+                                    $replyMarkup = [
+                                        'inline_keyboard' => [
+                                            [
+                                                ['text' => 'Confirm✅', 'callback_data' => "confirm_{$user->chat_id}"],
+                                                ['text' => 'Cancel⛔️', 'callback_data' => "cancel_{$user->chat_id}"],
+                                            ]
                                         ]
-                                    ]
-                                ];
+                                    ];
+                                    Log::info($admin);
                                 $this->store($admin->chat_id, $userData, $replyMarkup);
                             } else {
                                 $this->store($chat_id, "Admin not found!");
                             }
+                            $this->store($chat_id, "Registration successful!");
                         }
-
-                        $this->store($chat_id, "Registration successful!");
-
                         Cache::forget("register_step_{$chat_id}");
                         Cache::forget("register_name_{$chat_id}");
                         Cache::forget("register_email_{$chat_id}");
                         Cache::forget("register_password_{$chat_id}");
                         Cache::forget("confirmation_code_{$chat_id}");
+                        Cache::forget("register_user_{$chat_id}");
+                        Cache::forget("register_holder_{$chat_id}");
                     } else {
                         $this->store($chat_id, "Image download failed! Please, try again.");
                     }
@@ -343,71 +349,72 @@ class BotController extends Controller
                 }
             }
 
-            if ($text === '/status') {
-                if ($chat_id == User::where('role', 'admin')->first()->chat_id) {
-                    $this->store($chat_id, "Please, check the users:", [
-                        'keyboard' => [
-                            [
-                                ['text' => 'All users with status 1'],
-                                ['text' => 'All users with status 0'],
-                            ]
-                        ],
-                        'resize_keyboard' => true,
-                        'one_time_keyboard' => true,
-                    ]);
-                } else {
-                    $this->store($chat_id, "Siz admin emassiz");
-                }
-            }
+            // if ($text === '/status') {
+            //     if ($chat_id == User::where('role', 'admin')->first()->chat_id) {
+            //         $this->store($chat_id, "Please, check the users:", [
+            //             'keyboard' => [
+            //                 [
+            //                     ['text' => 'All users with status 1'],
+            //                     ['text' => 'All users with status 0'],
+            //                 ]
+            //             ],
+            //             'resize_keyboard' => true,
+            //             'one_time_keyboard' => true,
+            //         ]);
+            //     } else {
+            //         $this->store($chat_id, "Siz admin emassiz");
+            //     }
+            // }
 
-            if ($text === 'All users with status 1') {
-                $users = User::where('role', '!=', 'admin')->where('status', 1)->get();
+            // if ($text === 'All users with status 1') {
+            //     $users = User::where('role', '!=', 'admin')->where('status', 1)->get();
 
-                if ($users->isEmpty()) {
-                    $this->store($chat_id, "There are no users with status 1.");
-                } else {
-                    $userList = "All users with status 1:\n";
+            //     if ($users->isEmpty()) {
+            //         $this->store($chat_id, "There are no users with status 1.");
+            //     } else {
+            //         $userList = "All users with status 1:\n";
 
-                    foreach ($users as $user) {
-                        $userList .= "{$user->id}) User name: {$user->name}, Email: {$user->email}\n";
-                    }
+            //         foreach ($users as $user) {
+            //             $userList .= "{$user->id}) User name: {$user->name}, Email: {$user->email}\n";
+            //         }
 
-                    $this->store($chat_id, $userList . "\nPlease, enter the user number to change their status.");
-                }
-            }
+            //         $this->store($chat_id, $userList . "\nPlease, enter the user number to change their status.");
+            //     }
+            // }
 
-            if ($text === 'All users with status 0') {
-                $users = User::where('role', '!=', 'admin')->where('status', 0)->get();
+            // if ($text === 'All users with status 0') {
+            //     $users = User::where('role', '!=', 'admin')->where('status', 0)->get();
 
-                if ($users->isEmpty()) {
-                    $this->store($chat_id, "There are no users with status 0.");
-                } else {
-                    $userList = "All users with status 0:\n";
+            //     if ($users->isEmpty()) {
+            //         $this->store($chat_id, "There are no users with status 0.");
+            //     } else {
+            //         $userList = "All users with status 0:\n";
 
-                    foreach ($users as $user) {
-                        $userList .= "{$user->id}) User name: {$user->name}, Email: {$user->email}\n";
-                    }
+            //         foreach ($users as $user) {
+            //             $userList .= "{$user->id}) User name: {$user->name}, Email: {$user->email}\n";
+            //         }
 
-                    $this->store($chat_id, $userList . "\nPlease, enter the user number to change their status.");
-                }
-            }
+            //         $this->store($chat_id, $userList . "\nPlease, enter the user number to change their status.");
+            //     }
+            // }
 
-            if (is_numeric($text) && $text > 0 && $text <= count(User::where('role', '!=', 'admin')->get())) {
-                $userIndex = $text;
+            // if (is_numeric($text) && $text > 0 && $text <= count(User::where('role', '!=', 'admin')->get())) {
+            //     $userIndex = $text;
 
-                $allUsers = User::where('role', '!=', 'admin')->get();
-                if (isset($allUsers[$userIndex])) {
-                    $user = $allUsers[$userIndex];
+            //     $allUsers = User::where('role', '!=', 'admin')->get();
+            //     if (isset($allUsers[$userIndex])) {
+            //         $user = $allUsers[$userIndex];
 
-                    $user->status = !$user->status;
-                    $user->save();
+            //         $user->status = !$user->status;
+            //         $user->save();
 
-                    $newStatus = $user->status ? '1' : '0';
-                    $this->store($chat_id, "User status changed to {$newStatus}.");
-                } else {
-                    $this->store($chat_id, "There is no user with this number.");
-                }
-            }
+            //         $newStatus = $user->status ? '1' : '0';
+            //         $this->store($chat_id, "User status changed to {$newStatus}.");
+            //     } else {
+            //         $this->store($chat_id, "There is no user with this number.");
+            //     }
+            // }
+
             if ($call) {
                 $calldata = $call['data'];
 
@@ -449,21 +456,23 @@ class BotController extends Controller
                     $user = User::where('chat_id', $call_id)->first();
 
                     if ($user) {
-                        $chatId = User::where('role', 'admin')->first()->chat_id;
+                        $admin = User::where('role', 'admin')->first();
+                        $chatId = User::where('role', 'holder')->where('company', $user->company)->first()->chat_id;
                         $this->removeInlineKeyboard($callmid, $chatId);
                         $userData = "User name: " . $user->name . "\n" .
                             "Email: " . $user->email . "\n" .
-                            "Chat ID: " . $user->chat_id . "\n";
+                            "Chat ID: " . $user->chat_id . "\n" .
+                            "Company: " . $user->company . "\n";
 
                         $replyMarkup = [
                             'inline_keyboard' => [
                                 [
-                                    ['text' => 'Confirm✅', 'callback_data' => "confirm_{$chat_id}"],
-                                    ['text' => 'Cancel⛔️', 'callback_data' => "cancel_{$chat_id}"],
+                                    ['text' => 'Confirm✅', 'callback_data' => "confirm_{$user->chat_id}"],
+                                    ['text' => 'Cancel⛔️', 'callback_data' => "cancel_{$user->chat_id}"],
                                 ]
                             ]
                         ];
-                        $this->store($chatId, $userData, $replyMarkup);
+                        $this->store($admin->chat_id, $userData, $replyMarkup);
                     } else {
                         $this->store(User::where('role', 'admin')->first()->chat_id, "User not found.");
                     }

@@ -24,7 +24,8 @@ class User extends Authenticatable
         'role',
         'image',
         'status',
-        'chat_id'
+        'chat_id',
+        'company'
     ];
 
     /**
