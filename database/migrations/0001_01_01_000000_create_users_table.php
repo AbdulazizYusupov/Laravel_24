@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
-            $table->string('company')->nullable();
+            $table->string('company_id')->nullable();
             $table->string('image')->nullable();
             $table->boolean('status')->default(0);
             $table->bigInteger('chat_id')->unique();
