@@ -4,17 +4,17 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Card extends Model
+class Order extends Model
 {
-    protected $fillable = ['name','user_id','date','sum'];
+    protected $fillable = ['user_id','sum','date'];
 
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    public function cardmeals()
+    public function ordermeals()
     {
-        return $this->hasMany(CardMeal::class, 'card_id');
+        return $this->hasMany(OrderMeal::class, 'order_id');
     }
 }

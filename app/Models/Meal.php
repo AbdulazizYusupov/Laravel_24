@@ -17,4 +17,9 @@ class Meal extends Model
     {
         return $this->hasMany(CardMeal::class, 'meal_id');
     }
+
+    public function ordermeals()
+    {
+        return $this->hasMany(OrderMeal::class, 'meal_id');
+    }
 }

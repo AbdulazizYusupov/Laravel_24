@@ -13,35 +13,6 @@
     <div class="container mt-5">
         <div class="row">
             <div class="col-12">
-                <table class="table table-striped table-bordered table-hover text-center">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Price</th>
-                            <th>Total</th>
-                            <th>Remove</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($models as $meal)
-                            <tr>
-                                <td>{{ $meal->name }}</td>
-                                <td>{{ number_format($meal->price) }}</td>
-                                <td>
-                                    {{ number_format($meal->price) }}
-                                </td>
-                                <td>
-                                    <form action="{{ route('cart.remove', $meal->id) }}" method="POST">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button class="btn btn-danger">Remove</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-                <hr>
                 <form action="{{ route('cart.confirm') }}" method="POST">
                     @csrf
                     <div class="mb-3">
@@ -53,15 +24,7 @@
                             @endforeach
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label for="dateTime" class="form-label">Date</label>
-                        <input type="date" class="form-control" id="dateTime" name="date" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="address" class="form-label">Name</label>
-                        <input type="text" class="form-control" id="address" name="name" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Confirm Order</button>
+                    <button type="submit" class="btn btn-primary">Confirm</button>
                     <a href="{{ route('meal.index') }}" class="btn btn-outline-info">Back</a>
                 </form>
             </div>

@@ -61,30 +61,4 @@ class MealController extends Controller
 
         return redirect()->back()->with('success', 'Meal deleted successfully');
     }
-
-    public function add(Request $request)
-    {
-        $id = $request->id;
-
-        $cart = session()->get('cart', []);
-
-        if (isset($cart[$id])) {
-            $cart[$id]['quantity']++;
-        } else {
-            $cart[$id] = [
-                'meal_id' => $id,
-                'quantity' => 1,
-            ];
-        }
-        session()->put('cart', $cart);
-
-        return redirect()->back();
-    }
-
-    public function getCartCount()
-    {
-        $cart = session()->get('cart', []);
-        $totalQuantity = array_sum(array_column($cart, 'quantity'));
-        return $totalQuantity;
-    }
 }

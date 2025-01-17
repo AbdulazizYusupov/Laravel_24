@@ -36,13 +36,8 @@
 
 <body>
     <div class="cart-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="currentColor" class="bi bi-cart"
-            viewBox="0 0 16 16">
-            <path
-                d="M0 1.5A.5.5 0 0 1 .5 1H2a.5.5 0 0 1 .485.379L2.89 3H14.5a.5.5 0 0 1 .491.592l-1.5 8A.5.5 0 0 1 13 12H4a.5.5 0 0 1-.491-.408L2.01 3.607 1.61 2H.5a.5.5 0 0 1-.5-.5M3.102 4l1.313 7h8.17l1.313-7zM5 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4m7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4m-7 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2m7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2" />
-        </svg>
-        <a href="{{ route('cart.index') }}">
-            <span class="cart-counter">{{ count(session('cart', [])) }}</span>
+        <a class="btn btn-outline-success" href="{{ route('cart.index') }}">
+            Send
         </a>
     </div>
 
@@ -72,11 +67,6 @@
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn btn-danger">Delete</button>
-                                </form>
-                                <form action="{{ route('add') }}" method="POST" class="d-inline-block">
-                                    @csrf
-                                    <input type="hidden" name="id" value="{{ $meal->id }}">
-                                    <button class="btn btn-success">Add to Cart</button>
                                 </form>
                             </div>
                         </div>

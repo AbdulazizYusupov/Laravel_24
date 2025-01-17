@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class CardMeal extends Model
 {
     protected $fillable = [
-        'card_id', 'meal_id',
+        'card_id', 'meal_id','count'
     ];
 
     public function card()

@@ -3,7 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Mail\SendCode;
+use App\Models\Card;
+use App\Models\CardMeal;
 use App\Models\Company;
+use App\Models\Meal;
+use App\Models\Order;
+use App\Models\OrderMeal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -45,12 +50,12 @@ class BotController extends Controller
             $call_id = $data['callback_query']['message']['chat']['id'] ?? null;
             $callmid = $data['callback_query']['message']['message_id'] ?? null;
 
+
             if ($text === '/start') {
                 $this->store($chat_id, "Welcome, please enter:", [
                     'keyboard' => [
                         [
                             ['text' => 'Register'],
-                            ['text' => 'Login']
                         ]
                     ],
                     'resize_keyboard' => true,
@@ -335,74 +340,32 @@ class BotController extends Controller
                 return;
             }
 
-            if ($text === '/profile') {
-                $user = User::where('chat_id', $chat_id)->first();
+            if ($text === "/menu") {
+                $carts = Meal::all();
 
-                if ($user) {
-                    $profileMessage = "<b>Profile:</b>\n\n" .
-                        "<b>Name:</b> {$user->name}\n" .
-                        "<b>Email:</b> {$user->email}";
+                $message = "📋 <b>Menu!</b>\n";
+                $message .= "🆔 <b>Buyurtma berish!</b>\n";
+                $message .= "🍴 <b>Tanlang:</b>\n";
 
-                    $this->store($chat_id, $profileMessage);
+                $mealButtons = [];
 
-                    if ($user->image) {
-                        $filePath = storage_path("app/public/{$user->image}");
-                        if (file_exists($filePath)) {
-                            Http::attach('photo', file_get_contents($filePath), basename($filePath))
-                                ->post("https://api.telegram.org/bot" . env('TELEGRAM_BOT_TOKEN') . "/sendPhoto", [
-                                    'chat_id' => $chat_id,
-                                ]);
-                        } else {
-                            $this->store($chat_id, "Profile picture not found.");
-                        }
-                    } else {
-                        $this->store($chat_id, "Profile picture is not exists.");
-                    }
-                } else {
-                    $this->store($chat_id, "User not found. Please, register first.");
+                foreach ($carts as $cart) {
+                    $meal = Meal::find($cart->id);
+
+                    $mealButtons[] = [
+                        'text' => "{$meal->name}",
+                        'callback_data' => "meal_{$meal->id}"
+                    ];
                 }
-            }
-            if ($text === 'Login') {
-                Cache::put("login_step_{$chat_id}", 'email');
-                $this->store($chat_id, "Please, enter your email:", [
-                    'remove_keyboard' => true,
-                ]);
 
+                $keyboard = [
+                    'inline_keyboard' => array_merge(
+                        array_chunk($mealButtons, 4),
+                    )
+                ];
+
+                $this->store($chat_id, $message, $keyboard);
                 return;
-            }
-
-            if (Cache::get("login_step_{$chat_id}") === 'email') {
-                if (!filter_var($text, FILTER_VALIDATE_EMAIL)) {
-                    $this->store($chat_id, "Please, enter a valid email!");
-                    return;
-                }
-
-                Cache::put("login_email_{$chat_id}", $text);
-                Cache::put("login_step_{$chat_id}", 'password');
-                $this->store($chat_id, "Please, enter your password:");
-                return;
-            }
-
-            if (Cache::get("login_step_{$chat_id}") === 'password') {
-                Cache::put("login_password_{$chat_id}", $text);
-
-                $this->del($message_id, $chat_id);
-
-                $email = Cache::get("login_email_{$chat_id}");
-                $password = Cache::get("login_password_{$chat_id}");
-
-                $user = User::where('email', $email)->first();
-
-                if ($user && Hash::check($password, $user->password)) {
-                    Cache::forget("login_step_{$chat_id}");
-                    Cache::forget("login_email_{$chat_id}");
-                    Cache::forget("login_password_{$chat_id}");
-
-                    $this->store($chat_id, "Successfully logged in, {$user->name}.");
-                    $user->update(['chat_id' => $chat_id]);
-                } else {
-                    $this->store($chat_id, "Incorrect email or password. Please, try again.");
-                }
             }
 
             if ($call) {
@@ -485,6 +448,241 @@ class BotController extends Controller
                     }
                     return;
                 }
+
+                if (Str::startsWith($calldata, 'meal_')) {
+                    $meal_id = Str::after($calldata, 'meal_');
+                    $meal = Meal::find($meal_id);
+
+                    if ($meal) {
+                        $message = "<b>Siz tanlagan ovqat:</b>\n";
+                        $message .= "🍽️ <b>{$meal->name}</b>: " . number_format($meal->price) . " so'm\n\n";
+                        $message .= "Miqdorni kiriting:";
+
+                        $card = Card::where('user_id', User::where('chat_id', $call_id)->first()->id)->first() ?? null;
+
+                        if ($card == null || $card->date != Carbon::now()->format('Y-m-d')) {
+                            $card = Card::create([
+                                'user_id' => User::where('chat_id', $call_id)->first()->id,
+                                'date' => Carbon::now()->toDateString(),
+                            ]);
+                        }
+
+                        CardMeal::create([
+                            'card_id' => $card->id,
+                            'meal_id' => $meal->id
+                        ]);
+
+                        $keyboard = [
+                            'inline_keyboard' => [
+                                [['text' => 'Orqaga', 'callback_data' => 'back_to_menu']]
+                            ]
+                        ];
+
+                        $token = "https://api.telegram.org/bot" . env('TELEGRAM_BOT_TOKEN');
+                        $payload = [
+                            'chat_id' => $call_id,
+                            'message_id' => $callmid,
+                            'text' => $message,
+                            'parse_mode' => 'HTML',
+                            'reply_markup' => json_encode($keyboard),
+                        ];
+                        Http::post($token . '/editMessageText', $payload);
+
+                        Cache::forever('callmid', $callmid);
+                    }
+                }
+
+                if ($calldata === 'back_to_menu') {
+                    $message = "📋 <b>Menu!</b>\n";
+                    $message .= "🆔 <b>Buyurtma berish!</b>\n";
+                    $message .= "🍴 <b>Tanlang:</b>\n";
+
+                    $mealButtons = [];
+
+                    $carts = Meal::all();
+
+                    foreach ($carts as $cart) {
+                        $meal = Meal::find($cart->id);
+
+                        $mealButtons[] = [
+                            'text' => "{$meal->name}",
+                            'callback_data' => "meal_{$meal->id}"
+                        ];
+                    }
+
+                    $keyboard = [
+                        'inline_keyboard' => array_merge(
+                            array_chunk($mealButtons, 4),
+                            [
+                                [
+                                    [
+                                        'text' => '🛒 Savatcha',
+                                        'callback_data' => 'cart'
+                                    ]
+                                ]
+                            ]
+                        )
+                    ];
+
+                    $token = "https://api.telegram.org/bot" . env('TELEGRAM_BOT_TOKEN');
+                    $payload = [
+                        'chat_id' => $call_id,
+                        'message_id' => $callmid,
+                        'text' => $message,
+                        'parse_mode' => 'HTML',
+                        'reply_markup' => json_encode($keyboard),
+                    ];
+
+                    Http::post($token . '/editMessageText', $payload);
+                }
+                if ($calldata === "cart") {
+
+                    $card = Card::where('user_id', User::where('chat_id', $call_id)->first()->id)->first();
+
+                    $message = "📋 <b>🛒 Savatcha:</b>\n";
+                    $message .= "Sana: $card->date\n";
+                    foreach ($card->cardmeals as $meal) {
+                        $message .= "🍴 <b>{$meal->meal->name}</b>: {$meal->count}\n";
+                    }
+                    $message .= "💰 <b>Summa:</b> " . number_format($card->sum) . " so'm\n\n";
+
+                    $keyboard = [
+                        'inline_keyboard' => [
+                            [
+                                [
+                                    'text' => 'Zakaz berish✅',
+                                    'callback_data' => 'accept_order'
+                                ],
+                                [
+                                    'text' => 'Bekor qilish⛔️',
+                                    'callback_data' => 'www'
+                                ],
+                                [
+                                    'text' => 'Orqaga',
+                                    'callback_data' => 'back_to_menu'
+                                ],
+                            ]
+                        ]
+                    ];
+
+                    $this->del($callmid, $call_id);
+
+                    $token = "https://api.telegram.org/bot" . env('TELEGRAM_BOT_TOKEN');
+                    $payload = [
+                        'chat_id' => $call_id,
+                        'text' => $message,
+                        'parse_mode' => 'HTML',
+                        'reply_markup' => json_encode($keyboard),
+                    ];
+
+                    Http::post($token . '/sendMessage', $payload);
+                }
+
+                if ($calldata === "accept_order") {
+                    $card = Card::where('user_id', User::where('chat_id', $call_id)->first()->id)->first();
+
+                    $order = Order::create([
+                        'date' => Carbon::now()->toDateString(),
+                        'sum' => $card->sum,
+                        'user_id' => $card->user_id,
+                    ]);
+
+                    foreach ($card->cardmeals as $meal) {
+                        OrderMeal::create([
+                            'order_id' => $order->id,
+                            'meal_id' => $meal->meal_id,
+                            'count' => $meal->count,
+                        ]);
+                    }
+
+                    $card->delete();
+
+                    $message = "📋 <b>Buyurtmangiz qabul qilindi!</b>\n";
+
+                    $this->del($callmid, $call_id);
+                    $this->store($call_id, $message);
+                }
+                $call = $data['callback_query'] ?? null;
+                $calldata = $call['data'] ?? null;
+                if ($calldata === "www") {
+                    $user = User::where('chat_id', $call_id)->first();
+                    if ($user) {
+                        $card = Card::where('user_id', $user->id)->first();
+
+                        if ($card) {
+                            $card->delete();
+                            $message = "📋 <b>Buyurtmangiz bekor qilindi!</b>\n";
+                            $this->del($callmid, $call_id);
+                            $this->store($call_id, $message);
+                        } else {
+                            $message = "📋 Savatchangiz mavjud emas.";
+                            $this->store($call_id, $message);
+                        }
+                    }
+                }
+            }
+
+            if (is_numeric($text)) {
+                $card = Card::where('user_id', User::where('chat_id', $chat_id)->first()->id)->first() ?? null;
+
+                if ($card) {
+                    $meal = CardMeal::where('card_id', $card->id)->latest()->first();
+                    if ($meal) {
+                        $meal->update([
+                            'count' => $text
+                        ]);
+                    }
+                }
+
+                $card->update([
+                    'sum' => $card->sum + $meal->count * $meal->meal->price
+                ]);
+
+                $message = "📋 <b>Menu!</b>\n";
+                $message .= "🆔 <b>Buyurtma berish!</b>\n";
+                $message .= "🍴 <b>Tanlang:</b>\n";
+
+                $mealButtons = [];
+
+                $carts = Meal::all();
+
+                foreach ($carts as $cart) {
+                    $meal = Meal::find($cart->id);
+
+                    $mealButtons[] = [
+                        'text' => "{$meal->name}",
+                        'callback_data' => "meal_{$meal->id}"
+                    ];
+                }
+
+                $keyboard = [
+                    'inline_keyboard' => array_merge(
+                        array_chunk($mealButtons, 4),
+                        [
+                            [
+                                [
+                                    'text' => '🛒 Savatcha',
+                                    'callback_data' => 'cart'
+                                ]
+                            ]
+                        ]
+                    )
+                ];
+
+                $call_mid = Cache::get('callmid');
+
+                $this->del($message_id, $chat_id);
+
+                $token = "https://api.telegram.org/bot" . env('TELEGRAM_BOT_TOKEN');
+                $payload = [
+                    'chat_id' => $chat_id,
+                    'message_id' => $call_mid,
+                    'text' => $message,
+                    'parse_mode' => 'HTML',
+                    'reply_markup' => json_encode($keyboard),
+                ];
+
+                Http::post($token . '/editMessageText', $payload);
             }
         } catch (\Exception $exception) {
             Log::error($exception);
@@ -525,6 +723,7 @@ class BotController extends Controller
         ];
         Http::post($token . '/editMessageReplyMarkup', $payload);
     }
+
     public function delLocation($message_id, $chat_id)
     {
         $token = "https://api.telegram.org/bot" . env('TELEGRAM_BOT_TOKEN');

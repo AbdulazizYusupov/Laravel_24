@@ -18,8 +18,5 @@ Route::middleware('check')->group(function () {
     Route::resource('meal', App\Http\Controllers\MealController::class);
 
     Route::get('/cart', [OrderController::class, 'index'])->name('cart.index');
-    Route::delete('/cart/{id}', [OrderController::class, 'remove'])->name('cart.remove');
     Route::post('/cart/confirm', [OrderController::class, 'confirm'])->name('cart.confirm');
-
-    Route::post('/add', [MealController::class, 'add'])->name('add');
 });

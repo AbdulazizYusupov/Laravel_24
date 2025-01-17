@@ -18,9 +18,4 @@ class Company extends Model
     {
         return $this->hasMany(User::class, 'company_id');
     }
-
-    public function card()
-    {
-        return $this->hasOne(Card::class, 'company_id');
-    }
 }

@@ -56,4 +56,14 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Company::class, 'company_id');
     }
+
+    public function cards()
+    {
+        return $this->hasMany(Card::class, 'user_id');
+    }
+
+    public function orders()
+    {
+        return $this->hasMany(Order::class, 'user_id');
+    }
 }
